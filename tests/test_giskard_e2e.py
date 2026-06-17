@@ -18,6 +18,9 @@ import pytest
 from falsify_giskard import preregister, verify_scenario_result
 from falsify_giskard.core import extract_observed
 
+# A valid PRML dataset.hash: 64 lowercase hex chars (SHA-256 of the empty string).
+HASH64 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
 
 def _real_result():
     pytest.importorskip("giskard")
@@ -53,7 +56,8 @@ def test_real_types_verify_pass(tmp_path):
     path = tmp_path / "g.prml.yaml"
     preregister(
         metric="groundedness", threshold=0.8, threshold_direction=">=",
-        dataset="d", dataset_hash="sha256:a", seed=1, output_path=str(path),
+        dataset="d", dataset_hash=HASH64, seed=1, producer_id="acme/eval-bot",
+        output_path=str(path),
     )
     v = verify_scenario_result(result, str(path))
     assert v["status"] == "PASS"
@@ -65,7 +69,8 @@ def test_real_types_verify_fail(tmp_path):
     path = tmp_path / "g.prml.yaml"
     preregister(
         metric="pass_rate", threshold=0.9, threshold_direction=">=",
-        dataset="d", dataset_hash="sha256:a", seed=1, output_path=str(path),
+        dataset="d", dataset_hash=HASH64, seed=1, producer_id="acme/eval-bot",
+        output_path=str(path),
     )
     v = verify_scenario_result(result, str(path))  # observed 0.667 < 0.9
     assert v["status"] == "FAIL"

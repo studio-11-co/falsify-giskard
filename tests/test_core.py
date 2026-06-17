@@ -3,12 +3,17 @@
 Giskard's ScenarioResult is mocked with SimpleNamespace so these run without
 giskard-checks installed. A real giskard-checks scenario is exercised
 separately in test_giskard_e2e.py (skipped when giskard is absent).
+
+These tests assert the adapter emits real PRML v0.1 manifests (nine required
+fields, nested dataset/producer) and that every committed manifest passes
+``falsify_prml.validate_manifest``.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
+import falsify_prml as prml
 import pytest
 
 from falsify_giskard import (
@@ -18,6 +23,9 @@ from falsify_giskard import (
     verify_scenario_result,
 )
 from falsify_giskard.core import extract_observed
+
+# A valid PRML dataset.hash: 64 lowercase hex chars (SHA-256 of the empty string).
+HASH64 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 
 def _check(passed: bool, *, skipped: bool = False, metrics=()):
@@ -39,8 +47,9 @@ def _manifest(tmp_path, **over):
         threshold=0.9,
         threshold_direction=">=",
         dataset="support-qa-v1",
-        dataset_hash="sha256:abc",
+        dataset_hash=HASH64,
         seed=42,
+        producer_id="acme/eval-bot",
         giskard_scenario="grounded-answers",
     )
     kw.update(over)
@@ -61,11 +70,57 @@ def test_preregister_roundtrip(tmp_path):
     assert fields["giskard_scenario"] == "grounded-answers"
 
 
+def test_committed_manifest_is_valid_prml(tmp_path):
+    """Every committed manifest must be a real PRML v0.1 manifest."""
+    path, _ = _manifest(tmp_path)
+    fields, _ = load_committed_manifest(str(path))
+    assert prml.validate_manifest(fields) == []
+    # Real PRML schema: nested dataset/producer, comparator (not threshold_direction).
+    assert fields["version"] == "prml/0.1"
+    assert fields["comparator"] == ">="
+    assert "threshold_direction" not in fields
+    assert fields["dataset"] == {"id": "support-qa-v1", "hash": HASH64}
+    assert fields["producer"] == {"id": "acme/eval-bot"}
+    assert "claim_id" in fields and "created_at" in fields
+
+
+def test_claim_id_defaults_to_scenario_metric(tmp_path):
+    _, _ = _manifest(tmp_path)
+    fields, _ = load_committed_manifest(str(tmp_path / "x.prml.yaml"))
+    assert fields["claim_id"] == "grounded-answers:pass_rate"
+
+
+def test_claim_id_falls_back_to_dataset_when_no_scenario(tmp_path):
+    path = tmp_path / "n.prml.yaml"
+    preregister(
+        metric="pass_rate", threshold=0.9, threshold_direction=">=",
+        dataset="support-qa-v1", dataset_hash=HASH64, seed=1,
+        output_path=str(path),
+    )
+    fields, _ = load_committed_manifest(str(path))
+    assert fields["claim_id"] == "support-qa-v1:pass_rate"
+
+
+def test_claim_id_override(tmp_path):
+    path, _ = _manifest(tmp_path, claim_id="custom-claim")
+    fields, _ = load_committed_manifest(str(path))
+    assert fields["claim_id"] == "custom-claim"
+
+
 def test_preregister_rejects_bad_comparator(tmp_path):
     with pytest.raises(ValueError):
         preregister(
             metric="pass_rate", threshold=0.9, threshold_direction="=>",
-            dataset="d", dataset_hash="sha256:a", seed=1,
+            dataset="d", dataset_hash=HASH64, seed=1,
+        )
+
+
+def test_preregister_rejects_non_hex_dataset_hash(tmp_path):
+    # Old schema allowed "sha256:abc"; real PRML requires 64 lowercase hex.
+    with pytest.raises(ValueError):
+        preregister(
+            metric="pass_rate", threshold=0.9, threshold_direction=">=",
+            dataset="d", dataset_hash="sha256:abc", seed=1,
         )
 
 
@@ -103,6 +158,9 @@ def test_verify_pass(tmp_path):
     assert v["ok"] and v["hash_match"] and v["threshold_satisfied"]
     assert v["observed_value"] == 0.75
     assert v["expected_hash"] == h
+    # Verdict uses PRML field names.
+    assert v["comparator"] == ">="
+    assert "threshold_direction" not in v
 
 
 def test_verify_fail(tmp_path):
@@ -121,25 +179,35 @@ def test_verify_named_metric_pass(tmp_path):
     assert v["observed_value"] == 0.91
 
 
-def test_verify_tampered_noncanonical_file(tmp_path):
-    # A manifest file edited after commit so its bytes no longer match the
-    # canonical form: sha256(file) != hash(reparsed) -> TAMPERED.
-    path, _ = _manifest(tmp_path, threshold=0.7)
-    path.write_text(path.read_text() + "\n# sneaky edit\n", encoding="utf-8")
+def test_verify_tampered_mutated_field(tmp_path):
+    # Commit, then mutate a committed identity field after lock. Verifying
+    # against the lock-time `expected_hash` detects the swap -> TAMPERED.
+    path, h = _manifest(tmp_path, threshold=0.7)
+    fields, _ = load_committed_manifest(str(path))
+    fields["dataset"]["hash"] = "0" * 64  # different valid hex -> different hash
+    path.write_bytes(prml.canonicalize(fields).encode("utf-8"))
     r = _result(_check(True), _check(True))  # would PASS if untampered
-    v = verify_scenario_result(r, str(path))
+    v = verify_scenario_result(r, str(path), expected_hash=h)
     assert v["status"] == "TAMPERED"
     assert not v["hash_match"]
+    assert v["expected_hash"] == h
+    assert v["actual_hash"] != h
 
 
-def test_canonical_hash_is_deterministic():
-    m1 = GiskardManifest(
-        metric="pass_rate", value=None, threshold=0.9, threshold_direction=">=",
-        dataset="d", dataset_hash="sha256:a", seed=1, pre_registered="2026-06-01T00:00:00Z",
+def test_verify_pass_with_expected_hash(tmp_path):
+    # Untampered file + correct expected_hash -> PASS.
+    path, h = _manifest(tmp_path, threshold=0.7)
+    r = _result(_check(True), _check(True), _check(True), _check(False))  # 0.75
+    v = verify_scenario_result(r, str(path), expected_hash=h)
+    assert v["status"] == "PASS" and v["hash_match"]
+
+
+def test_canonical_hash_matches_falsify_prml(tmp_path):
+    # The adapter's hash MUST equal falsify_prml.manifest_hash of the same dict.
+    m = GiskardManifest(
+        metric="pass_rate", comparator=">=", threshold=0.9,
+        dataset_id="d", dataset_hash=HASH64, producer_id="p", seed=1,
+        created_at="2026-06-01T00:00:00Z", claim_id="d:pass_rate",
     )
-    m2 = GiskardManifest(
-        metric="pass_rate", value=0.99, threshold=0.9, threshold_direction=">=",
-        dataset="d", dataset_hash="sha256:a", seed=1, pre_registered="2026-06-01T00:00:00Z",
-    )
-    # `value` is excluded from the hash, so m1 and m2 hash identically.
-    assert m1.hash() == m2.hash()
+    assert m.hash() == prml.manifest_hash(m.to_dict())
+    assert prml.validate_manifest(m.to_dict()) == []

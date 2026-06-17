@@ -5,14 +5,15 @@ realised result against it:
 
     from falsify_giskard import preregister, verify_scenario_result
 
-    # Before the run — commit the claim
+    # Before the run — commit the claim (real PRML v0.1 manifest)
     h, manifest = preregister(
         metric="pass_rate",
         threshold=0.9,
-        threshold_direction=">=",
-        dataset="support-qa-v1",
-        dataset_hash="sha256:abc...",
+        threshold_direction=">=",          # PRML `comparator`
+        dataset="support-qa-v1",           # PRML `dataset.id`
+        dataset_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",  # PRML `dataset.hash` (64 hex)
         seed=42,
+        producer_id="acme/eval-bot",       # PRML `producer.id`
         giskard_scenario="grounded-answers",
         output_path="grounded.prml.yaml",
     )
@@ -35,7 +36,7 @@ from falsify_giskard.core import (
     MalformedResultError,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "preregister",
