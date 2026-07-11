@@ -1,0 +1,29 @@
+# Canary: does the LATEST giskard-checks release still work with our adapter?
+# Weekly + manual. giskard-checks is still in beta, so it is the adapter most
+# likely to move under us. Failure = fix before a user or host hits it.
+name: canary (latest giskard-checks)
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC (siblings run 05:00 / 05:20 / 05:40)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install adapter + LATEST giskard-checks (unpinned, pre-releases included)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install --upgrade --pre giskard-checks
+          python -c "import giskard_checks; print('giskard-checks', getattr(giskard_checks, '__version__', 'unknown'))"
+      - name: Test suite against latest giskard-checks
+        run: python -m pytest tests/ -q
