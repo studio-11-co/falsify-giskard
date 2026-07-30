@@ -53,7 +53,8 @@ def _manifest(tmp_path, **over):
         giskard_scenario="grounded-answers",
     )
     kw.update(over)
-    path = tmp_path / "x.prml.yaml"
+    out_name = kw.pop("output_name", "x.prml.yaml")
+    path = tmp_path / out_name
     h, _ = preregister(output_path=str(path), **kw)
     return path, h
 
@@ -67,7 +68,7 @@ def test_preregister_roundtrip(tmp_path):
     assert committed_hash == h
     assert fields["metric"] == "pass_rate"
     assert fields["threshold"] == 0.9
-    assert fields["giskard_scenario"] == "grounded-answers"
+    assert fields["metric_args"]["giskard_scenario"] == "grounded-answers"
 
 
 def test_committed_manifest_is_valid_prml(tmp_path):
@@ -84,27 +85,28 @@ def test_committed_manifest_is_valid_prml(tmp_path):
     assert "claim_id" in fields and "created_at" in fields
 
 
-def test_claim_id_defaults_to_scenario_metric(tmp_path):
-    _, _ = _manifest(tmp_path)
-    fields, _ = load_committed_manifest(str(tmp_path / "x.prml.yaml"))
-    assert fields["claim_id"] == "grounded-answers:pass_rate"
+def test_claim_id_defaults_to_generated_uuid7(tmp_path):
+    import re as _re
+    path, _ = _manifest(tmp_path)
+    fields, _h = load_committed_manifest(str(path))
+    assert _re.fullmatch(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+        fields["claim_id"],
+    ), fields["claim_id"]
 
 
-def test_claim_id_falls_back_to_dataset_when_no_scenario(tmp_path):
-    path = tmp_path / "n.prml.yaml"
-    preregister(
-        metric="pass_rate", threshold=0.9, threshold_direction=">=",
-        dataset="support-qa-v1", dataset_hash=HASH64, seed=1,
-        output_path=str(path),
-    )
-    fields, _ = load_committed_manifest(str(path))
-    assert fields["claim_id"] == "support-qa-v1:pass_rate"
+def test_claim_id_unique_per_lock(tmp_path):
+    p1, _ = _manifest(tmp_path, output_name="a.yaml")
+    p2, _ = _manifest(tmp_path, output_name="b.yaml")
+    f1, _ = load_committed_manifest(str(p1))
+    f2, _ = load_committed_manifest(str(p2))
+    assert f1["claim_id"] != f2["claim_id"]
 
 
 def test_claim_id_override(tmp_path):
-    path, _ = _manifest(tmp_path, claim_id="custom-claim")
+    path, _ = _manifest(tmp_path, claim_id="01920000-0000-7000-8000-000000000042")
     fields, _ = load_committed_manifest(str(path))
-    assert fields["claim_id"] == "custom-claim"
+    assert fields["claim_id"] == "01920000-0000-7000-8000-000000000042"
 
 
 def test_preregister_rejects_bad_comparator(tmp_path):
@@ -207,7 +209,7 @@ def test_canonical_hash_matches_falsify_prml(tmp_path):
     m = GiskardManifest(
         metric="pass_rate", comparator=">=", threshold=0.9,
         dataset_id="d", dataset_hash=HASH64, producer_id="p", seed=1,
-        created_at="2026-06-01T00:00:00Z", claim_id="d:pass_rate",
+        created_at="2026-06-01T00:00:00Z", claim_id="01920000-0000-7000-8000-000000000042",
     )
     assert m.hash() == prml.manifest_hash(m.to_dict())
     assert prml.validate_manifest(m.to_dict()) == []

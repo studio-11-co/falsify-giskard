@@ -2,6 +2,18 @@
 
 All notable changes to `falsify-giskard` are documented here.
 
+## [0.3.0] — 2026-07-30
+
+### Changed (breaking)
+- **Manifests conform to the published PRML v0.1 JSON Schema** (falsify
+  0.3.12 aligned all validators with it): `claim_id` defaults to a generated
+  **UUIDv7** (was `"<scenario>:<metric>"`, which the schema rejects; custom
+  claim_ids must be UUIDv7), and `giskard_scenario` rides under
+  **`metric_args`** instead of as a top-level key
+  (`additionalProperties: false`).
+- Hashes of manifests produced by 0.2.x do not match 0.3.0 output; re-lock to
+  move to conforming manifests. Minimum `falsify` dependency is now 0.3.12.
+
 ## [0.2.0] — 2026-06-18
 
 ### Changed (breaking)
