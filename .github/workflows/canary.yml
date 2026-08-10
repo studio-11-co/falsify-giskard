@@ -24,6 +24,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
           python -m pip install --upgrade --pre giskard-checks
-          python -c "from importlib.metadata import version; import giskard.checks; print('giskard-checks', version('giskard-checks'))"
+          # --pre above also drags TRANSITIVE deps to prereleases; that tests
+          # pydantic betas, not our integration (2026-08-10: pydantic 2.14.0b1
+          # broke giskard's own import). Re-pin non-giskard deps to stable.
+          python -m pip install --upgrade pydantic pydantic-settings
+          python -c "from importlib.metadata import version; import giskard.checks; print('giskard-checks', version('giskard-checks'), '/ pydantic', version('pydantic'))"
       - name: Test suite against latest giskard-checks
         run: python -m pytest tests/ -q
