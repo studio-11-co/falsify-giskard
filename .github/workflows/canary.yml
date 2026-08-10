@@ -26,8 +26,10 @@ jobs:
           python -m pip install --upgrade --pre giskard-checks
           # --pre above also drags TRANSITIVE deps to prereleases; that tests
           # pydantic betas, not our integration (2026-08-10: pydantic 2.14.0b1
-          # broke giskard's own import). Re-pin non-giskard deps to stable.
-          python -m pip install --upgrade pydantic pydantic-settings
+          # broke giskard's own import). Force pydantic back to the latest
+          # STABLE (a plain --upgrade won't downgrade an installed prerelease).
+          PYD_STABLE=$(python -c "import json,urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/pydantic/json'))['info']['version'])")
+          python -m pip install "pydantic==${PYD_STABLE}"
           python -c "from importlib.metadata import version; import giskard.checks; print('giskard-checks', version('giskard-checks'), '/ pydantic', version('pydantic'))"
       - name: Test suite against latest giskard-checks
         run: python -m pytest tests/ -q
