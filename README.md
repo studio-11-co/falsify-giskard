@@ -62,4 +62,4 @@ For durable tamper-evidence, commit the returned hash to git or to the public re
 
 ## License
 
-MIT. The PRML specification is CC BY 4.0.
+MIT. The PRML specification is under the Community Specification License 1.0.
