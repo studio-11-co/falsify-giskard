@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "falsify-giskard: PRML pre-registration adapter for Giskard scenario results"
+abstract: >-
+  A Python package that wraps the Giskard evaluation framework with
+  Pre-Registered ML Manifest (PRML) v0.1 hashing, allowing an evaluation
+  claim to be committed before a scenario runs and the scenario result to
+  be verified against the committed manifest afterwards.
+authors:
+  - family-names: "Öztürk"
+    given-names: "Cüneyt"
+    affiliation: "Falsify OÜ"
+    email: "hello@falsify.dev"
+type: software
+license: MIT
+repository-code: "https://github.com/studio-11-co/falsify-giskard"
+url: "https://falsify.dev"
+version: "0.3.0"
+date-released: 2026-07-30
+keywords:
+  - "PRML"
+  - "pre-registration"
+  - "Giskard"
+  - "ML evaluation"
+  - "reproducibility"
+identifiers:
+  - type: url
+    value: "https://spec.falsify.dev/v0.1"
+    description: "PRML v0.1 specification"
+preferred-citation:
+  type: software
+  title: "falsify-giskard"
+  authors:
+    - family-names: "Öztürk"
+      given-names: "Cüneyt"
+  year: 2026
+  url: "https://github.com/studio-11-co/falsify-giskard"
+  version: "0.3.0"
+references:
+  - type: software
+    title: "falsify — PRML reference implementation"
+    authors:
+      - family-names: "Öztürk"
+        given-names: "Cüneyt"
+    repository-code: "https://github.com/studio-11-co/falsify"
